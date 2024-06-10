@@ -1,0 +1,133 @@
+name: tests
+
+env:
+  version: 9.0.0
+  RUST_VERSION: 1.74.0
+
+on:
+  push:
+    branches:
+      - main
+      - development
+  pull_request:
+    branches:
+      - main
+      - development
+
+jobs:
+  test-with-coverage:
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install dependencies (SCIPOptSuite)
+        run: |
+          wget --quiet --no-check-certificate https://github.com/scipopt/scip/releases/download/$(echo "v${{env.version}}" | tr -d '.')/SCIPOptSuite-${{ env.version }}-Linux-ubuntu20.deb
+          sudo apt-get update && sudo apt install -y ./SCIPOptSuite-${{ env.version }}-Linux-ubuntu20.deb
+
+      - name: Install rust stable toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - name: Run cargo-tarpaulin
+        uses: actions-rs/tarpaulin@v0.1
+        with:
+          version: '0.15.0'
+          args: '--verbose --all --out Xml'
+
+      - name: Upload to codecov.io
+        uses: codecov/codecov-action@v2
+        with:
+          fail_ci_if_error: true
+
+  linux-conda-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: conda-incubator/setup-miniconda@v2
+        with:
+          activate-environment: test
+          allow-softlinks: true
+
+      - name: Install dependencies (SCIPOptSuite)
+        run: |
+          conda install -y --prefix $CONDA/envs/test --channel conda-forge scip
+          echo "LD_LIBRARY_PATH=$CONDA/envs/test/lib" >> "${GITHUB_ENV}"
+          echo "CONDA_PREFIX=$CONDA/envs/test" >> "${GITHUB_ENV}"
+
+      - name: Build
+        run: |
+          cargo build
+
+      - name: Test
+        run: |
+          rustup toolchain install nightly  
+          RUSTFLAGS=-Zsanitizer=leak cargo +nightly test --features raw
+
+# TODO: make this work with a manual run of the action
+#  publish-crate:
+#    needs:
+#      - linux-conda-test
+#      - test-with-coverage
+#      - windows-test
+#    runs-on: ubuntu-latest
+#    steps:
+#      - uses: actions/checkout@v3
+#      - uses: actions-rs/toolchain@v1
+#        with:
+#          toolchain: stable
+#          override: true
+#      - name: publish crate
+#        uses: katyo/publish-crates@v2
+#        if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
+#        with:
+#          registry-token: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+  windows-test:
+    env:
+      SCIPOPTDIR: C:\scipoptdir
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Download dependencies (SCIPOptSuite)
+        shell: powershell
+        run: wget https://github.com/scipopt/scip/releases/download/$(echo "v${{env.version}}" | tr -d '.')/SCIPOptSuite-${{ env.version }}-win64-VS15.exe -outfile scipopt-installer.exe
+
+      - name: Install dependencies (SCIPOptSuite)
+        shell: cmd
+        run: scipopt-installer.exe /S /D=${{ env.SCIPOPTDIR }}
+
+      - name: Build and test
+        shell: powershell
+        run: |
+          $Env:SCIPOPTDIR = "${{ env.SCIPOPTDIR }}"
+          $Env:PATH += ";$Env:SCIPOPTDIR/bin"
+          cargo build
+          cargo test
+
+  cargo-fmt-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          components: rustfmt
+      - name: Check Formatting
+        run: cargo fmt --all -- --check
+
+  cargo-clippy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Check Clippy Linter
+        run: cargo clippy --all-features --all-targets -- -D warnings

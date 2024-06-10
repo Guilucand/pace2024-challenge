@@ -1,0 +1,32 @@
+[package]
+name = "pace-challenge-2024-solution"
+version = "0.1.0"
+edition = "2021"
+
+default-run = "solver"
+
+[profile.release]
+debug = true
+
+[profile.bundle]
+inherits = "release"
+debug = false
+strip = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+mimalloc = "0.1.41"
+rand = "0.8.5"
+rustc-hash = "1.1.0"
+structopt = "0.3.26"
+env_logger = "0.11.3"
+log = "0.4.21"
+russcip = { version = "0.3.4", path = "external/russcip" }
+libc = "0.2.155"
+signal-hook = "0.3.17"
+
+[features]
+verbose = []
+file_input = []
+heuristic = []

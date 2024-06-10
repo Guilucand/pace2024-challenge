@@ -1,0 +1,7 @@
+/target
+.vscode
+.history
+solver-bundle/
+pace2024.tgz
+pace2024solver
+pace2024solver_heuristic
